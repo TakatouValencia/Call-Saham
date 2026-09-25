@@ -30,6 +30,11 @@ class Config:
     WEBHOOK_PORT: int = int(os.getenv("PORT") or os.getenv("WEBHOOK_PORT", "8000"))
     WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "").strip()
 
+    # --- Autonomous Market Scanner Settings ---
+    # Memindai pasar secara otomatis di jam bursa tanpa perlu input manual
+    AUTO_SCANNER_ENABLE: bool = os.getenv("AUTO_SCANNER_ENABLE", "true").lower() in ("true", "1", "yes")
+    SCANNER_INTERVAL_MINUTES: int = int(os.getenv("SCANNER_INTERVAL_MINUTES", "30"))
+
     @classmethod
     def get_discord_channel_ids(cls) -> Set[int]:
         """Parse comma-separated channel IDs into a set of integers."""

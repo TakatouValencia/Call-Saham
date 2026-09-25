@@ -7,6 +7,7 @@ from services.discord_listener import start_discord_bot
 from services.webhook_server import start_webhook_server
 from services.ai_analyzer import ai_analyzer
 from services.notifier import notifier
+from services.market_scanner import start_autonomous_scanner, market_scanner
 
 logger = setup_logger("MainApp")
 
@@ -50,6 +51,7 @@ async def run_simulation_test():
 async def main():
     parser = argparse.ArgumentParser(description="Call EANovaire - AI Stock Signal Automation")
     parser.add_argument("--test", action="store_true", help="Jalankan simulasi tes AI & Notifikasi")
+    parser.add_argument("--scan-now", action="store_true", help="Jalankan satu siklus pemindaian pasar sekarang")
     args = parser.parse_args()
 
     # Validasi konfigurasi
@@ -65,12 +67,18 @@ async def main():
         await run_simulation_test()
         return
 
+    if args.scan_now:
+        logger.info("🔍 Menjalankan pemindaian instan (--scan-now)...")
+        await market_scanner.run_scan_cycle()
+        return
+
     logger.info("=" * 60)
     logger.info("🚀 CALL EANOVAIRE - AI STOCK SIGNAL AUTOMATION AKTIF")
     logger.info(f"🧠 AI Provider        : {config.AI_PROVIDER.upper()}")
     logger.info(f"📱 Telegram Target    : {config.TELEGRAM_CHAT_ID or 'Nonaktif'}")
     logger.info(f"🎮 Discord Webhook    : {'Aktif' if config.DISCORD_WEBHOOK_URL else 'Nonaktif'}")
     logger.info(f"🌐 Webhook API Server : {'Aktif' if config.WEBHOOK_ENABLE else 'Nonaktif'}")
+    logger.info(f"⚡ Market Scanner     : {'Aktif (Jam Bursa IDX)' if config.AUTO_SCANNER_ENABLE else 'Nonaktif'}")
     logger.info("=" * 60)
 
     # Jalankan layanan secara paralel
@@ -84,10 +92,14 @@ async def main():
     if config.DISCORD_BOT_TOKEN:
         tasks.append(asyncio.create_task(start_discord_bot()))
     else:
-        logger.warning("DISCORD_BOT_TOKEN belum diisi. Discord listener tidak dijalankan.")
+        logger.info("DISCORD_BOT_TOKEN tidak diisi. Menggunakan mode Webhook & Autonomous Market Scanner.")
+
+    # 3. Task Autonomous Market Scanner (Senin - Jumat 09:00 - 16:00 WIB)
+    if config.AUTO_SCANNER_ENABLE:
+        tasks.append(asyncio.create_task(start_autonomous_scanner()))
 
     if not tasks:
-        logger.error("Tidak ada listener yang aktif! Aktifkan Discord atau Webhook di .env.")
+        logger.error("Tidak ada layanan aktif! Aktifkan Webhook, Discord, atau Market Scanner.")
         return
 
     try:
