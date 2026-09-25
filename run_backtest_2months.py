@@ -198,12 +198,14 @@ def run_stock_smc_backtest(ticker: str, period: str = '60d', interval: str = '1h
             last_signal_bar = i
             bull_setup_active = False
             entry_price = float(closes[i])
-            cur_atr = float(atr[i]) if not np.isnan(atr[i]) else (entry_price * 0.02)
-            sl_price = float(last_sl_price - cur_atr * 0.2) if not np.isnan(last_sl_price) else (entry_price - cur_atr * 1.5)
+            # Target TP 20% Tanpa Batasan Waktu
+            tp_price = round(entry_price * 1.20, 2)
+            # Stop loss swing terukur (Support / max 5% risk)
+            sl_price = round(max(last_sl_price if not np.isnan(last_sl_price) else entry_price * 0.95, entry_price * 0.94), 2)
             if sl_price >= entry_price:
-                sl_price = entry_price - cur_atr * 1.5
+                sl_price = round(entry_price * 0.95, 2)
             risk = entry_price - sl_price
-            tp_price = entry_price + risk * rr_ratio
+            calculated_rr = round((tp_price - entry_price) / (risk + 1e-9), 1)
 
             call_time = str(timestamps[i])[:16]
             trades.append({
@@ -215,7 +217,7 @@ def run_stock_smc_backtest(ticker: str, period: str = '60d', interval: str = '1h
                 'sl': round(sl_price, 2),
                 'tp': round(tp_price, 2),
                 'score': score_buy,
-                'rr': f"1:{rr_ratio:.1f}",
+                'rr': f"1:{calculated_rr}",
                 'outcome': None,
                 'exit_bar': None,
                 'exit_price': None,
@@ -227,12 +229,13 @@ def run_stock_smc_backtest(ticker: str, period: str = '60d', interval: str = '1h
             last_signal_bar = i
             bear_setup_active = False
             entry_price = float(closes[i])
-            cur_atr = float(atr[i]) if not np.isnan(atr[i]) else (entry_price * 0.02)
-            sl_price = float(last_sh_price + cur_atr * 0.2) if not np.isnan(last_sh_price) else (entry_price + cur_atr * 1.5)
+            # Target TP 20% (Short / koreksi)
+            tp_price = round(entry_price * 0.80, 2)
+            sl_price = round(min(last_sh_price if not np.isnan(last_sh_price) else entry_price * 1.05, entry_price * 1.06), 2)
             if sl_price <= entry_price:
-                sl_price = entry_price + cur_atr * 1.5
+                sl_price = round(entry_price * 1.05, 2)
             risk = sl_price - entry_price
-            tp_price = entry_price - risk * rr_ratio
+            calculated_rr = round((entry_price - tp_price) / (risk + 1e-9), 1)
 
             call_time = str(timestamps[i])[:16]
             trades.append({
@@ -244,7 +247,7 @@ def run_stock_smc_backtest(ticker: str, period: str = '60d', interval: str = '1h
                 'sl': round(sl_price, 2),
                 'tp': round(tp_price, 2),
                 'score': score_sell,
-                'rr': f"1:{rr_ratio:.1f}",
+                'rr': f"1:{calculated_rr}",
                 'outcome': None,
                 'exit_bar': None,
                 'exit_price': None,

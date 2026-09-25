@@ -125,15 +125,11 @@ def run_bandarmology_backtest(ticker: str, period: str = '60d', interval: str = 
             else:
                 pola = f"Silent Accumulation (CMF Inflow {cmf20[i]:.2f})"
 
-            # Money Management Saham Gorengan (Stop Loss Ketat 3.5% - 5%, TP Bertingkat):
-            # SL di bawah swing low terdekat atau 1.5x ATR
-            sl_price = round(max(entry - cur_atr * 1.5, entry * 0.95), 1)
+            # Money Management Saham Gorengan (Target TP 20% Tanpa Batas Waktu)
+            sl_price = round(max(entry - cur_atr * 1.5, entry * 0.94), 1)
+            tp_price = round(entry * 1.20, 1) # Target TP +20%
             risk = entry - sl_price
-            
-            # Target Profit Bertingkat Saham Gorengan:
-            tp1 = round(entry + risk * 1.5, 1)  # Target 1 (~+6% - +10%)
-            tp2 = round(entry + risk * 3.0, 1)  # Target 2 (~+15% - +25%)
-            tp3 = round(entry + risk * 5.0, 1)  # Target 3 (Moon / ARA +35%+)
+            calculated_rr = round((tp_price - entry) / (risk + 1e-9), 1)
 
             call_time = str(timestamps[i])[:16]
             calls.append({
@@ -142,75 +138,47 @@ def run_bandarmology_backtest(ticker: str, period: str = '60d', interval: str = 
                 'entry_bar': i,
                 'entry': entry,
                 'sl': sl_price,
-                'tp1': tp1,
-                'tp2': tp2,
-                'tp3': tp3,
+                'tp': tp_price,
+                'rr': f"1:{calculated_rr}",
                 'rvol': round(rvol, 1),
                 'pola': pola,
                 'outcome': None,
                 'exit_price': None,
-                'pnl_pct': 0.0,
-                'highest_tp': 'BELUM'
+                'pnl_pct': 0.0
             })
 
-    # Evaluasi Hasil Call 2 Bulan
+    # Evaluasi Hasil Call 2 Bulan (Target TP 20% Tanpa Batas Waktu)
     for c in calls:
         e_bar = c['entry_bar']
         entry = c['entry']
         sl = c['sl']
-        tp1 = c['tp1']
-        tp2 = c['tp2']
-        tp3 = c['tp3']
-
-        hit_tp1, hit_tp2, hit_tp3 = False, False, False
+        tp = c['tp']
 
         for b in range(e_bar + 1, n):
             h = highs[b]
             l = lows[b]
 
-            if h >= tp3: hit_tp3 = True
-            if h >= tp2: hit_tp2 = True
-            if h >= tp1: hit_tp1 = True
+            # Cek apakah harga menyentuh TP 20%
+            if h >= tp:
+                c['outcome'] = 'WIN (TP 20% HIT)'
+                c['exit_price'] = tp
+                c['pnl_pct'] = 20.0
+                break
 
-            # Stop loss hit sebelum TP1
-            if l <= sl and not hit_tp1:
+            # Cek Stop Loss
+            if l <= sl:
                 c['outcome'] = 'SL HIT'
                 c['exit_price'] = sl
                 c['pnl_pct'] = round(((sl - entry) / entry) * 100, 2)
-                c['highest_tp'] = 'GAGAL (SL)'
-                break
-
-            # Jika sudah kena TP tapi kemudian turun melewati entry (Trailing Stop at BEP)
-            if hit_tp1 and l <= entry:
-                # Close trade at TP1 gain
-                c['outcome'] = 'WIN (TP1 HIT)'
-                c['exit_price'] = tp1
-                c['pnl_pct'] = round(((tp1 - entry) / entry) * 100, 2)
-                c['highest_tp'] = 'TP1'
                 break
 
         if c['outcome'] is None:
-            if hit_tp3:
-                c['outcome'] = 'SUPER WIN (TP3 HIT)'
-                c['exit_price'] = tp3
-                c['pnl_pct'] = round(((tp3 - entry) / entry) * 100, 2)
-                c['highest_tp'] = 'TP3 (+30%+)'
-            elif hit_tp2:
-                c['outcome'] = 'BIG WIN (TP2 HIT)'
-                c['exit_price'] = tp2
-                c['pnl_pct'] = round(((tp2 - entry) / entry) * 100, 2)
-                c['highest_tp'] = 'TP2 (+15%+)'
-            elif hit_tp1:
-                c['outcome'] = 'WIN (TP1 HIT)'
-                c['exit_price'] = tp1
-                c['pnl_pct'] = round(((tp1 - entry) / entry) * 100, 2)
-                c['highest_tp'] = 'TP1 (+8%+)'
-            else:
-                cur_price = closes[-1]
-                c['outcome'] = 'FLOATING / OPEN'
-                c['exit_price'] = cur_price
-                c['pnl_pct'] = round(((cur_price - entry) / entry) * 100, 2)
-                c['highest_tp'] = 'PROSES'
+            # Posisi masih berjalan / floating menuju target 20%
+            cur_price = closes[-1]
+            c['outcome'] = 'FLOATING / OPEN'
+            c['exit_price'] = cur_price
+            c['pnl_pct'] = round(((cur_price - entry) / entry) * 100, 2)
+
 
     return calls, fund
 
@@ -257,26 +225,26 @@ if __name__ == '__main__':
             st_color = f"🟡 {status}"
 
         p_prefix = "+" if c['pnl_pct'] > 0 else ""
-        print(f"{c['call_time']:<16} | {clean_ticker:<8} | {c['entry']:<8} | {c['sl']:<8} | {c['tp1']:<8} | {c['tp2']:<8} | {c['highest_tp']:<14} | {st_color:<18} | {p_prefix}{c['pnl_pct']}%")
+        print(f"{c['call_time']:<16} | {clean_ticker:<8} | {c['entry']:<8} | {c['sl']:<8} | {c['tp']:<8} | {c['rr']:<6} | {st_color:<22} | {p_prefix}{c['pnl_pct']}%")
 
     print("="*105)
     total_closed = wins + losses
     win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
     print(f"Total Call Sinyal Gorengan : {len(all_calls)} Sinyal")
-    print(f"Hit Take Profit (TP1/2/3) : {wins} Trade ({win_rate:.1f}% Win Rate)")
+    print(f"Hit Take Profit (+20%)    : {wins} Trade ({win_rate:.1f}% Win Rate)")
     print(f"Hit Stop Loss             : {losses} Trade")
     print(f"Posisi Masih Berjalan     : {opens} Trade")
     print("="*105)
 
     # Simpan hasil ke file markdown
     md = []
-    md.append("# 🔥 LAPORAN BACKTEST SAHAM GORENGAN & SECOND-LINER (AKUMULASI BANDAR)")
+    md.append("# 🔥 LAPORAN BACKTEST SAHAM GORENGAN & SECOND-LINER (TARGET TP 20% - NO TIME LIMIT)")
     md.append(f"**Tanggal Pengujian:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    md.append(f"**Strategi:** Bandarmology Flow (Volume Anomali 2x+, Chaikin Money Flow Inflow, Wyckoff Spring Breakout & Fundamental Catalyst)")
+    md.append(f"**Strategi:** Bandarmology Flow (Volume Anomali 2x+, CMF Inflow, Wyckoff Spring Breakout, Target TP +20.0% Tanpa Batas Waktu)")
     md.append("\n---\n")
     md.append("### 📊 Ringkasan Hasil:")
     md.append(f"- **Total Call Akumulasi:** {len(all_calls)} Sinyal")
-    md.append(f"- **Win Rate (Hit TP):** **{win_rate:.1f}%** ({wins} Win / {losses} Loss)")
+    md.append(f"- **Hit TP 20% (Win Rate):** **{win_rate:.1f}%** ({wins} Win / {losses} Loss)")
     md.append(f"- **Posisi Masih Berjalan:** {opens} Saham")
     md.append("\n---\n")
 
@@ -291,13 +259,14 @@ if __name__ == '__main__':
         f_info = fund_db.get(raw_t, {})
         t_wins = sum(1 for x in c_list if 'WIN' in x['outcome'])
         t_loss = sum(1 for x in c_list if 'SL' in x['outcome'])
+        t_open = sum(1 for x in c_list if 'OPEN' in x['outcome'])
         t_wr = (t_wins / (t_wins + t_loss) * 100) if (t_wins + t_loss) > 0 else 0
 
         md.append(f"## 🚀 Saham: **${ticker}**")
         md.append(f"**Sektor:** {f_info.get('sector')} | **Market Cap:** Rp {f_info.get('cap_t')} T | **Katalis:** {f_info.get('catalyst')}")
-        md.append(f"**Performa:** Total Call: {len(c_list)} | Win Rate: **{t_wr:.1f}%** (TP: {t_wins} | SL: {t_loss})")
-        md.append("\n| Tanggal Call | Entry | Stop Loss | TP1 | TP2 | TP3 | Pola Akumulasi Bandar | Status Hasil | PnL Realized |")
-        md.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+        md.append(f"**Performa:** Total Call: {len(c_list)} | Win Rate: **{t_wr:.1f}%** (TP 20%: {t_wins} | SL: {t_loss} | Open: {t_open})")
+        md.append("\n| Tanggal Call | Entry | Stop Loss | Take Profit (+20%) | Risk/Reward | Pola Akumulasi Bandar | Status Hasil | PnL Realized |")
+        md.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
 
         for x in c_list:
             p_prefix = "+" if x['pnl_pct'] > 0 else ""
@@ -308,7 +277,7 @@ if __name__ == '__main__':
             else:
                 badge = f"🟡 **{x['outcome']}**"
 
-            md.append(f"| {x['call_time']} | `{x['entry']}` | `{x['sl']}` | `{x['tp1']}` | `{x['tp2']}` | `{x['tp3']}` | {x['pola']} | {badge} | **{p_prefix}{x['pnl_pct']}%** |")
+            md.append(f"| {x['call_time']} | `{x['entry']}` | `{x['sl']}` | `{x['tp']}` | `{x['rr']}` | {x['pola']} | {badge} | **{p_prefix}{x['pnl_pct']}%** |")
         md.append("\n")
 
     report_file = "backtest_saham_gorengan_2bulan.md"
