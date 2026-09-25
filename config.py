@@ -26,6 +26,7 @@ class Config:
 
     # --- Webhook Settings ---
     WEBHOOK_ENABLE: bool = os.getenv("WEBHOOK_ENABLE", "true").lower() in ("true", "1", "yes")
+    WEBHOOK_HOST: str = os.getenv("WEBHOOK_HOST", "0.0.0.0").strip()
     # Otomatis deteksi port Railway ($PORT) atau default ke WEBHOOK_PORT
     WEBHOOK_PORT: int = int(os.getenv("PORT") or os.getenv("WEBHOOK_PORT", "8000"))
     WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "").strip()

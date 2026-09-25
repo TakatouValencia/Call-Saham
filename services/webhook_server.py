@@ -15,6 +15,7 @@ class WebhookSignalPayload(BaseModel):
     text: str
     source: Optional[str] = "Website / Webhook Alert"
 
+@app.get("/")
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "app": "Call EANovaire", "ai_provider": config.AI_PROVIDER}
